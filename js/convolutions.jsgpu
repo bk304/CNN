@@ -1,0 +1,197 @@
+var gpu = new GPU();
+
+function create_3D_convolution_kernel(depth){
+    let D3_convolution_kernel = gpu.createKernel(function(img, filters){
+        var value= 0;
+        for(let w=0; w<this.constants.Depth; w++){
+            for(let i=0; i<3; i++){
+                for(let j=0; j<3; j++){
+                    value += (img[w][i+this.thread.y+1][j+this.thread.x+1] * filters[this.thread.z][w][i][j]);  
+                }
+            }
+        }
+        return value;
+    }).setOutput([28,28,depth]).setConstants({ Depth: depth });                // ESSE OUTPUT TENQ SER IGUAL AS MEDIDAS DA IMG POS CONVOLUTION
+    return D3_convolution_kernel;
+}
+
+let D3_convolution_kernel = create_3D_convolution_kernel(nn.c_depth);
+function D3_convolution(conv_img, nnfilters2nd){
+    let resized = [];
+    for(let w=0; w<conv_img.length; w++){
+        resized_img = new Matrix((conv_img[0].rows+2),(conv_img[0].cols+2));
+        for(let i=1; i<(resized_img.rows - 1); i++){
+            for(let j=1; j<(resized_img.cols - 1); j++){
+                resized_img.data[i][j] = conv_img[w].data[i-1][j-1]
+            }
+        }
+        resized.push(resized_img.data);
+    }
+
+    let filters = [];
+    for(let w=0; w<nn.c_depth; w++){
+        filters[w] = [];
+    }
+    for(let w=0; w<nn.c_depth; w++){
+        for(let i=0; i<nn.c_depth; i++){
+            filters[w].push(nnfilters2nd[w][i].data);
+        }
+    }
+    let filtered = D3_convolution_kernel(resized, filters);
+    let allFiltered = [];
+    for(let i=0; i<nn.c_depth; i++){
+        let oneImg = new Matrix(28, 28);
+        oneImg.data = filtered[i];
+        allFiltered.push(oneImg);
+    }
+    return allFiltered;
+}
+
+//
+function d_create_3D_convolution_kernel(depth){
+    let d_D3_convolution_kernel = gpu.createKernel(function(img, filters){
+        var value= 0;
+        for(let w=0; w<this.constants.Depth; w++){
+            for(let i=0; i<28; i++){
+                for(let j=0; j<28; j++){
+                    value += (img[this.thread.z][i+(this.thread.y*13)][j+(this.thread.x*13)] * filters[i][j]);  
+                }
+            }
+        }
+        return value;
+    }).setOutput([3,3,depth]).setConstants({ Depth: depth });                // ESSE OUTPUT TENQ SER IGUAL AS MEDIDAS DA IMG POS CONVOLUTION
+    return d_D3_convolution_kernel;
+}
+
+let d_D3_convolution_kernel = d_create_3D_convolution_kernel(nn.c_depth);
+function d_D3_convolution(conv_img, nnfilters2nd){
+    let resized = [];
+    for(let w=0; w<conv_img.length; w++){
+        resized_img = new Matrix((conv_img[0].rows+26),(conv_img[0].cols+26));
+        for(let i=13; i<(resized_img.rows - 13); i++){
+            for(let j=13; j<(resized_img.cols - 13); j++){
+                resized_img.data[i][j] = conv_img[w].data[i-13][j-13]
+            }
+        }
+        resized.push(resized_img.data);
+    }
+
+    let filtered = [];
+    for(let w=0; w<nn.c_depth; w++){
+    filtered[w] = d_D3_convolution_kernel(resized, nnfilters2nd[w].data);
+    }
+    let allFiltered = [];
+    for(let i=0; i<nn.c_depth; i++){
+        allFiltered.push([]);
+    }
+    
+    for(let i=0; i<nn.c_depth; i++){
+        for(let w=0; w<nn.c_depth; w++){
+            let oneImg = new Matrix(3, 3);
+            oneImg.data = filtered[i][w];
+            allFiltered[i].push(oneImg);
+        }
+    }
+    return allFiltered;
+}
+//
+
+function create_convolution_kernel(depth){
+    let convolution_kernel = gpu.createKernel(function(img, filters){
+        var value= 0;
+        for(let i=0; i<3; i++){
+            for(let j=0; j<3; j++){
+                value += (img[i+this.thread.y+1][j+this.thread.x+1] * filters[this.thread.z][i][j]);  
+            }
+        }
+        return value;
+    }).setOutput([28,28,depth]);                // ESSE OUTPUT TENQ SER IGUAL AS MEDIDAS DA IMG POS CONVOLUTION
+    return convolution_kernel;
+}
+// COLINHA
+//  [x,y,z]
+//  [cols,rows,depth]
+
+let convolution_kernel = create_convolution_kernel(nn.c_depth);
+function convolution(img, nnfilters){
+    let resized = new Matrix((img.rows+2),(img.cols+2));
+    for(let i=1; i<(resized.rows - 1); i++){
+        for(let j=1; j<(resized.cols - 1); j++){
+            resized.data[i][j] = img.data[i-1][j-1]
+        }
+    }
+    let filters = [];
+    for(let i=0; i<nn.c_depth; i++){
+        filters.push(nnfilters[i].data);
+    }
+    let filtered = convolution_kernel(resized.data, filters);
+    let allFiltered = [];
+    for(let i=0; i<nn.c_depth; i++){
+        let oneImg = new Matrix(img.rows, img.cols);
+        oneImg.data = filtered[i];
+        allFiltered.push(oneImg);
+    }
+    return allFiltered;
+}
+
+//-----
+function create_d_convolution_kernel(depth){
+    let d_convolution_kernel = gpu.createKernel(function(img, filters){
+        var value= 0;
+        for(let i=0; i<28; i++){
+            for(let j=0; j<28; j++){
+                value += (img[i+(this.thread.y*13)][j+(this.thread.x*13)] * filters[this.thread.z][i][j]);  
+            }
+        }
+        return value;
+    }).setOutput([3,3,depth]);                // ESSE OUTPUT TENQ SER IGUAL AS MEDIDAS DA IMG POS CONVOLUTION
+    return d_convolution_kernel;
+}
+// COLINHA
+//  [x,y,z]
+//  [cols,rows,depth]
+
+let d_convolution_kernel = create_d_convolution_kernel(nn.c_depth);
+function d_convolution(img, nnfilters){
+    let resized = new Matrix((img.rows+26),(img.cols+26));
+    for(let i=13; i<(resized.rows - 13); i++){
+        for(let j=13; j<(resized.cols - 13); j++){
+            resized.data[i][j] = img.data[i-13][j-13]
+        }
+    }
+    let filters = [];
+    for(let i=0; i<nn.c_depth; i++){
+        filters.push(nnfilters[i].data);
+    }
+    let filtered = d_convolution_kernel(resized.data, filters);
+    let allFiltered = [];
+    for(let i=0; i<nn.c_depth; i++){
+        let oneImg = new Matrix(3, 3);
+        oneImg.data = filtered[i];
+        allFiltered.push(oneImg);
+    }
+    return allFiltered;
+}
+//---------
+
+
+function conv_test(img, filters){
+    var result = [];
+    var value= 0;
+    for(let w=0; w<nn.c_depth; w++){
+        result[w] = [[],[],[]];
+        for(let fi=0; fi<3; fi++){
+            result[w][fi] = [[],[],[]];
+            for(let fj=0; fj<3; fj++){
+                for(let i=0; i<28; i++){
+                    for(let j=0; j<28; j++){
+                        value += (img[i+(fi*13)][j+(fj*13)] * filters[w][i][j]);  
+                    }
+                }
+                console.log(result)
+                result[fi][fj] = value;
+            }
+        }
+    }
+    return result
+}
