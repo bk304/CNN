@@ -1,4 +1,4 @@
-# Sobre
+# CNN
 
 Esse projeto visa identificar números escritos "a mão" usando uma tecnica de rede neural com filtros convulacionais.
 
